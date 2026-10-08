@@ -1,0 +1,27 @@
+We are building a small browser-based hide-and-seek game prototype using vanilla HTML, CSS, and JavaScript.
+
+I am a complete beginner at programming, so keep the code simple and explain important decisions.
+
+For this first step ONLY:
+
+Create a full-screen HTML5 Canvas game.
+Create a simple rectangular room with visible walls.
+Create a blue circular player.
+Allow the player to move using WASD and arrow keys.
+Keep the player inside the room boundaries.
+Use requestAnimationFrame for the game loop.
+Put the HTML in index.html, styling in style.css, and game logic in game.js.
+Do not use external libraries or frameworks.
+Do not add enemies, hiding, camouflage, menus, multiplayer, or other features yet.
+Keep the implementation straightforward and beginner-friendly.
+
+After implementing it, briefly explain:
+
+what index.html does
+what style.css does
+what game.js does
+where the player's position is stored
+how keyboard movement works
+what requestAnimationFrame does
+
+Do not rewrite the project architecture or add unnecessary abstractions.
