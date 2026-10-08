@@ -11,6 +11,9 @@ body {
   height: 100%;
   overflow: hidden; /* no scrollbars */
   background: #111111;
+  touch-action: none; /* stop phone scrolling/zooming during play */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Canvas size is set in JavaScript (width/height attributes).
@@ -18,4 +21,5 @@ body {
 #gameCanvas {
   display: block;
   background: #111111;
+  touch-action: none;
 }

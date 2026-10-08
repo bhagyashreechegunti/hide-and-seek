@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Hide and Seek</title>
   <link rel="stylesheet" href="style.css">
   <!-- Backup styles so the page still fills the screen if style.css is slow to load -->
@@ -13,10 +13,14 @@
       height: 100%;
       overflow: hidden;
       background: #111111;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
     #gameCanvas {
       display: block;
       background: #111111;
+      touch-action: none;
     }
   </style>
 </head>

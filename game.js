@@ -62,6 +62,164 @@ const keys = {
   right: false,
 };
 
+// --- Touch / on-screen controls ---
+// Virtual joystick (left) + restart button (right) for phones
+const touchMove = {
+  active: false,
+  id: null,
+  originX: 0,
+  originY: 0,
+  stickX: 0,
+  stickY: 0,
+  dx: 0,
+  dy: 0,
+};
+
+const JOYSTICK_RADIUS = 55;
+const STICK_RADIUS = 22;
+const TOUCH_DEADZONE = 12;
+
+// Button areas (updated every resize / draw)
+let startButton = { x: 0, y: 0, w: 220, h: 56 };
+let restartButton = { x: 0, y: 0, w: 70, h: 70 };
+
+function isTouchDevice() {
+  return (
+    "ontouchstart" in window ||
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
+
+function layoutTouchControls() {
+  // Joystick sits bottom-left
+  touchMove.originX = 90;
+  touchMove.originY = canvas.height - 100;
+  if (!touchMove.active) {
+    touchMove.stickX = touchMove.originX;
+    touchMove.stickY = touchMove.originY;
+  }
+
+  // Restart sits bottom-right
+  restartButton.w = 72;
+  restartButton.h = 72;
+  restartButton.x = canvas.width - restartButton.w - 24;
+  restartButton.y = canvas.height - restartButton.h - 28;
+
+  // Big center button for menu / end screens
+  startButton.w = Math.min(260, canvas.width - 40);
+  startButton.h = 58;
+  startButton.x = canvas.width / 2 - startButton.w / 2;
+  startButton.y = canvas.height / 2 + 70;
+}
+
+function pointInRect(px, py, rect) {
+  return (
+    px >= rect.x &&
+    px <= rect.x + rect.w &&
+    py >= rect.y &&
+    py <= rect.y + rect.h
+  );
+}
+
+// Convert browser touch/mouse coords → canvas pixel coords
+function getCanvasPos(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY,
+  };
+}
+
+function handlePrimaryAction() {
+  if (gameState === "menu") {
+    level = 1;
+    resetRound();
+  } else if (gameState === "won" || gameState === "lost") {
+    gameState = "menu";
+  }
+}
+
+function updateJoystickFromPoint(x, y) {
+  let dx = x - touchMove.originX;
+  let dy = y - touchMove.originY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const maxDist = JOYSTICK_RADIUS - 8;
+
+  if (dist > maxDist && dist > 0) {
+    dx = (dx / dist) * maxDist;
+    dy = (dy / dist) * maxDist;
+  }
+
+  touchMove.stickX = touchMove.originX + dx;
+  touchMove.stickY = touchMove.originY + dy;
+  touchMove.dx = dx;
+  touchMove.dy = dy;
+
+  // Map stick to movement flags (same as WASD)
+  keys.up = dy < -TOUCH_DEADZONE;
+  keys.down = dy > TOUCH_DEADZONE;
+  keys.left = dx < -TOUCH_DEADZONE;
+  keys.right = dx > TOUCH_DEADZONE;
+}
+
+function clearJoystick() {
+  touchMove.active = false;
+  touchMove.id = null;
+  touchMove.dx = 0;
+  touchMove.dy = 0;
+  touchMove.stickX = touchMove.originX;
+  touchMove.stickY = touchMove.originY;
+  keys.up = false;
+  keys.down = false;
+  keys.left = false;
+  keys.right = false;
+}
+
+function onPointerDown(clientX, clientY, pointerId) {
+  const pos = getCanvasPos(clientX, clientY);
+
+  if (gameState === "menu" || gameState === "won" || gameState === "lost") {
+    // Tap start button OR anywhere on menu/end to continue
+    handlePrimaryAction();
+    return;
+  }
+
+  if (gameState === "playing") {
+    if (pointInRect(pos.x, pos.y, restartButton)) {
+      resetRound();
+      return;
+    }
+
+    // Left half of screen / near joystick = move
+    if (pos.x < canvas.width * 0.55 || pointInCircle(pos.x, pos.y, touchMove.originX, touchMove.originY, JOYSTICK_RADIUS + 40)) {
+      touchMove.active = true;
+      touchMove.id = pointerId;
+      updateJoystickFromPoint(pos.x, pos.y);
+    }
+  }
+}
+
+function pointInCircle(px, py, cx, cy, radius) {
+  const dx = px - cx;
+  const dy = py - cy;
+  return dx * dx + dy * dy <= radius * radius;
+}
+
+function onPointerMove(clientX, clientY, pointerId) {
+  if (!touchMove.active) return;
+  if (touchMove.id !== null && pointerId !== touchMove.id) return;
+  const pos = getCanvasPos(clientX, clientY);
+  updateJoystickFromPoint(pos.x, pos.y);
+}
+
+function onPointerUp(pointerId) {
+  if (touchMove.id !== null && pointerId !== touchMove.id) return;
+  clearJoystick();
+}
+
 // --- Room helpers ---
 function getRoomBounds() {
   return {
@@ -150,6 +308,8 @@ function resizeCanvas() {
   canvas.height = height;
 
   layoutRoom();
+  layoutTouchControls();
+  clearJoystick();
 
   // Resizing mid-game would scramble positions — return to menu
   if (gameState === "playing") {
@@ -367,23 +527,20 @@ function updatePlayer() {
   }
 }
 
-// --- Input ---
+// --- Keyboard input (laptop) ---
 window.addEventListener("keydown", function (event) {
   const key = event.key.toLowerCase();
 
-  if (key === "w" || key === "arrowup") keys.up = true;
-  if (key === "s" || key === "arrowdown") keys.down = true;
-  if (key === "a" || key === "arrowleft") keys.left = true;
-  if (key === "d" || key === "arrowright") keys.right = true;
+  // Don't fight the joystick while a finger is steering
+  if (!touchMove.active) {
+    if (key === "w" || key === "arrowup") keys.up = true;
+    if (key === "s" || key === "arrowdown") keys.down = true;
+    if (key === "a" || key === "arrowleft") keys.left = true;
+    if (key === "d" || key === "arrowright") keys.right = true;
+  }
 
-  // Start from menu / continue after win-lose
   if (key === " " || key === "enter") {
-    if (gameState === "menu") {
-      level = 1;
-      resetRound();
-    } else if (gameState === "won" || gameState === "lost") {
-      gameState = "menu";
-    }
+    handlePrimaryAction();
     event.preventDefault();
   }
 
@@ -402,12 +559,76 @@ window.addEventListener("keydown", function (event) {
 });
 
 window.addEventListener("keyup", function (event) {
+  if (touchMove.active) return;
   const key = event.key.toLowerCase();
 
   if (key === "w" || key === "arrowup") keys.up = false;
   if (key === "s" || key === "arrowdown") keys.down = false;
   if (key === "a" || key === "arrowleft") keys.left = false;
   if (key === "d" || key === "arrowright") keys.right = false;
+});
+
+// --- Touch + mouse on the canvas ---
+canvas.addEventListener(
+  "touchstart",
+  function (event) {
+    event.preventDefault();
+    for (let i = 0; i < event.changedTouches.length; i++) {
+      const t = event.changedTouches[i];
+      onPointerDown(t.clientX, t.clientY, t.identifier);
+    }
+  },
+  { passive: false }
+);
+
+canvas.addEventListener(
+  "touchmove",
+  function (event) {
+    event.preventDefault();
+    for (let i = 0; i < event.changedTouches.length; i++) {
+      const t = event.changedTouches[i];
+      onPointerMove(t.clientX, t.clientY, t.identifier);
+    }
+  },
+  { passive: false }
+);
+
+canvas.addEventListener(
+  "touchend",
+  function (event) {
+    event.preventDefault();
+    for (let i = 0; i < event.changedTouches.length; i++) {
+      onPointerUp(event.changedTouches[i].identifier);
+    }
+  },
+  { passive: false }
+);
+
+canvas.addEventListener(
+  "touchcancel",
+  function (event) {
+    for (let i = 0; i < event.changedTouches.length; i++) {
+      onPointerUp(event.changedTouches[i].identifier);
+    }
+  },
+  { passive: false }
+);
+
+// Mouse also works for testing touch UI on a laptop
+canvas.addEventListener("mousedown", function (event) {
+  onPointerDown(event.clientX, event.clientY, "mouse");
+});
+
+window.addEventListener("mousemove", function (event) {
+  if (touchMove.active && touchMove.id === "mouse") {
+    onPointerMove(event.clientX, event.clientY, "mouse");
+  }
+});
+
+window.addEventListener("mouseup", function () {
+  if (touchMove.id === "mouse") {
+    onPointerUp("mouse");
+  }
 });
 
 window.addEventListener("resize", resizeCanvas);
